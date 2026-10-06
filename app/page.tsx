@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useMemo, useState } from 'react'
+import { getSupabaseClient } from '@/lib/supabase/client'
 import {
   Activity,
   Bell,
@@ -56,14 +57,89 @@ function Logo() {
 function AuthScreen({ onLogin }: { onLogin: () => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [message, setMessage] = useState('')
-  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setMessage(mode === 'login' ? 'ログインしました。' : 'アカウントを作成しました。'); setTimeout(onLogin, 450) }
-  return <main className="flex min-h-screen bg-[#f7faf7] text-[#27352d]">
-    <section className="hidden flex-1 flex-col justify-between bg-[#deefe2] p-12 lg:flex xl:p-20"><div><Logo /><div className="mt-24"><p className="text-xs font-bold uppercase tracking-[.24em] text-[#5c8b6c]">あなたと、ペットの毎日に</p><h1 className="mt-5 text-5xl font-semibold leading-tight tracking-tight text-[#234d34]">大切な家族の<br />健康を、ひとつに。</h1><p className="mt-6 max-w-md leading-8 text-[#587564]">通院記録やワクチン予定をかんたんに管理。忙しい毎日でも、ペットの健康を見守れます。</p></div></div><div className="flex items-center gap-2 text-sm text-[#5b7d66]"><ShieldCheck size={18} />安心して使えるペット健康管理</div></section>
-    <section className="flex w-full items-center justify-center px-5 py-10 sm:px-10 lg:w-[500px] xl:w-[560px]"><div className="w-full max-w-[370px]"><div className="mb-12 lg:hidden"><Logo /></div><h2 className="text-3xl font-semibold tracking-tight">{mode === 'login' ? 'おかえりなさい' : 'アカウントを作成'}</h2><p className="mt-2 text-sm text-[#7b877f]">{mode === 'login' ? 'ペットの健康管理を続けましょう。' : '無料でPet Careをはじめましょう。'}</p><div className="mt-8 grid grid-cols-2 rounded-xl bg-[#e9efea] p-1 text-sm font-medium"><button onClick={() => { setMode('login'); setMessage('') }} className={`rounded-lg py-2.5 ${mode === 'login' ? 'bg-white text-[#36724f] shadow-sm' : 'text-[#89958d]'}`}>ログイン</button><button onClick={() => { setMode('signup'); setMessage('') }} className={`rounded-lg py-2.5 ${mode === 'signup' ? 'bg-white text-[#36724f] shadow-sm' : 'text-[#89958d]'}`}>新規登録</button></div><form onSubmit={submit} className="mt-7 space-y-5">{mode === 'signup' && <Field label="お名前" placeholder="山田 太郎" />}<Field label="メールアドレス" type="email" placeholder="you@example.com" /><Field label="パスワード" type="password" placeholder="6文字以上" /><button className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#36724f] text-sm font-semibold text-white shadow-lg shadow-[#36724f]/20 transition hover:bg-[#2c5e40]">{mode === 'login' ? 'ログイン' : 'アカウントを作成'}<ChevronRight size={17} /></button></form>{message && <p role="status" className="mt-4 rounded-xl bg-[#e6f3e9] px-4 py-3 text-center text-sm text-[#36724f]">{message}</p>}<div className="my-7 flex items-center gap-3 text-xs text-[#a0aba2]"><span className="h-px flex-1 bg-[#e1e8e2]" />または<span className="h-px flex-1 bg-[#e1e8e2]" /></div><button onClick={() => setMessage('Googleログインは連携後に利用できます。')} className="flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-[#dce5dd] bg-white text-sm font-medium"><b className="text-[#4285f4]">G</b>Googleで続ける</button><p className="mt-8 text-center text-xs leading-5 text-[#9aa69d]">続けることで、利用規約と<br />プライバシーポリシーに同意したものとします。</p></div></section>
-  </main>
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setMessage('')
+    const formData = new FormData(event.currentTarget)
+    const email = String(formData.get('email'))
+    const password = String(formData.get('password'))
+
+    try {
+      const supabase = getSupabaseClient()
+      if (mode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) {
+          setMessage(error.message)
+          return
+        }
+        onLogin()
+        return
+      }
+
+      const { data, error } = await supabase.auth.signUp({ email, password })
+      if (error) {
+        setMessage(error.message)
+        return
+      }
+      if (data.session) {
+        onLogin()
+      } else {
+        setMessage('確認メールを送信しました。メール内のリンクから登録を完了してください。')
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '認証に失敗しました。')
+    }
+  }
+
+  return (
+    <main className="flex min-h-screen bg-[#f7faf7] text-[#27352d]">
+      <section className="hidden flex-1 flex-col justify-between bg-[#deefe2] p-12 lg:flex xl:p-20">
+        <div>
+          <Logo />
+          <div className="mt-24">
+            <p className="text-xs font-bold uppercase tracking-[.24em] text-[#5c8b6c]">あなたと、ペットの毎日に</p>
+            <h1 className="mt-5 text-5xl font-semibold leading-tight tracking-tight text-[#234d34]">大切な家族の<br />健康を、ひとつに。</h1>
+            <p className="mt-6 max-w-md leading-8 text-[#587564]">通院記録やワクチン予定をかんたんに管理。忙しい毎日でも、ペットの健康を見守れます。</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-[#5b7d66]"><ShieldCheck size={18} />安心して使えるペット健康管理</div>
+      </section>
+      <section className="flex w-full items-center justify-center px-5 py-10 sm:px-10 lg:w-[500px] xl:w-[560px]">
+        <div className="w-full max-w-[370px]">
+          <div className="mb-12 lg:hidden"><Logo /></div>
+          <h2 className="text-3xl font-semibold tracking-tight">{mode === 'login' ? 'おかえりなさい' : 'アカウントを作成'}</h2>
+          <p className="mt-2 text-sm text-[#7b877f]">{mode === 'login' ? 'ペットの健康管理を続けましょう。' : '無料でPet Careをはじめましょう。'}</p>
+          <div className="mt-8 grid grid-cols-2 rounded-xl bg-[#e9efea] p-1 text-sm font-medium">
+            <button type="button" onClick={() => { setMode('login'); setMessage('') }} className={`rounded-lg py-2.5 ${mode === 'login' ? 'bg-white text-[#36724f] shadow-sm' : 'text-[#89958d]'}`}>ログイン</button>
+            <button type="button" onClick={() => { setMode('signup'); setMessage('') }} className={`rounded-lg py-2.5 ${mode === 'signup' ? 'bg-white text-[#36724f] shadow-sm' : 'text-[#89958d]'}`}>新規登録</button>
+          </div>
+          <form onSubmit={submit} className="mt-7 space-y-5">
+            {mode === 'signup' && <Field label="お名前" name="name" placeholder="山田 太郎" />}
+            <Field label="メールアドレス" name="email" type="email" placeholder="you@example.com" />
+            <Field label="パスワード" name="password" type="password" placeholder="6文字以上" />
+            <button className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#36724f] text-sm font-semibold text-white shadow-lg shadow-[#36724f]/20 transition hover:bg-[#2c5e40]">
+              {mode === 'login' ? 'ログイン' : 'アカウントを作成'}<ChevronRight size={17} />
+            </button>
+          </form>
+          {message && <p role="status" className="mt-4 rounded-xl bg-[#e6f3e9] px-4 py-3 text-center text-sm text-[#36724f]">{message}</p>}
+          <div className="my-7 flex items-center gap-3 text-xs text-[#a0aba2]"><span className="h-px flex-1 bg-[#e1e8e2]" />または<span className="h-px flex-1 bg-[#e1e8e2]" /></div>
+          <button type="button" onClick={() => setMessage('Googleログインは連携後に利用できます。')} className="flex h-12 w-full items-center justify-center gap-3 rounded-xl border border-[#dce5dd] bg-white text-sm font-medium"><b className="text-[#4285f4]">G</b>Googleで続ける</button>
+          <p className="mt-8 text-center text-xs leading-5 text-[#9aa69d]">続けることで、利用規約と<br />プライバシーポリシーに同意したものとします。</p>
+        </div>
+      </section>
+    </main>
+  )
 }
 
-function Field({ label, type = 'text', placeholder }: { label: string; type?: string; placeholder: string }) { return <label className="block"><span className="mb-2 block text-sm font-medium">{label}</span><input required minLength={type === 'password' ? 6 : undefined} type={type} placeholder={placeholder} className="h-12 w-full rounded-xl border border-[#dce5dd] bg-white px-4 text-sm outline-none transition placeholder:text-[#b4beb6] focus:border-[#75a486] focus:ring-4 focus:ring-[#e1f0e4]" /></label> }
+function Field({ label, name, type = 'text', placeholder }: { label: string; name: string; type?: string; placeholder: string }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium">{label}</span>
+      <input name={name} required minLength={type === 'password' ? 6 : undefined} type={type} placeholder={placeholder} className="h-12 w-full rounded-xl border border-[#dce5dd] bg-white px-4 text-sm outline-none transition placeholder:text-[#b4beb6] focus:border-[#75a486] focus:ring-4 focus:ring-[#e1f0e4]" />
+    </label>
+  )
+}
 
 export default function Page() {
   const [loggedIn, setLoggedIn] = useState(false)
